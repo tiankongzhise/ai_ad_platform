@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 全局样式覆盖 */
+:root {
+  --primary-color: #0ea5e9;
+}
+
+/* 响应式布局容器 */
+.page-container {
+  @apply min-h-screen bg-gray-50;
+}
+
+/* 卡片通用样式 */
+.card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-100;
+}
+
+/* 指标卡片样式 */
+.metric-card {
+  @apply card p-6 hover:shadow-md transition-shadow duration-200;
+}
+
+/* 空态容器 */
+.empty-state {
+  @apply flex flex-col items-center justify-center py-16 px-8 text-center;
+}
+
+/* 演示数据标识 */
+.demo-badge {
+  @apply inline-flex items-center px-2 py-0.5 rounded border border-dashed border-blue-400 bg-blue-50 text-blue-600 text-xs;
+}
+
+/* 进度指示器 */
+.progress-indicator {
+  @apply w-full bg-gray-200 rounded-full h-2;
+}
+
+.progress-indicator-fill {
+  @apply bg-blue-500 h-2 rounded-full transition-all duration-300;
+}
+
+/* 图表容器 */
+.chart-container {
+  @apply w-full;
+}
+
+/* 表格容器 */
+.table-container {
+  @apply overflow-x-auto;
+}
+
+/* 操作按钮组 */
+.action-buttons {
+  @apply flex gap-2;
+}
+
+/* 响应式栅格 */
+.responsive-grid {
+  @apply grid gap-4;
+  grid-template-columns: repeat(1, 1fr);
+}
+
+@media (min-width: 768px) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

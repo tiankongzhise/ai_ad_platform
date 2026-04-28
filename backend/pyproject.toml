@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eduadcrm"
+version = "1.0.0"
+description = "教育广告CRM平台后端 - EduAdCRM MVP"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "EduAdCRM Team"}
+]
+keywords = ["education", "advertising", "crm", "fastapi", "celery"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # Web 框架
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "gunicorn>=22.0.0",
+    
+    # 数据库
+    "sqlalchemy>=2.0.30",
+    "aiomysql>=0.2.0",
+    "alembic>=1.13.1",
+    
+    # 配置管理
+    "pydantic-settings>=2.2.1",
+    
+    # 认证
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    
+    # 异步任务
+    "celery[redis]>=5.4.0",
+    "redis>=5.0.4",
+    
+    # HTTP 客户端
+    "httpx>=0.27.0",
+    
+    # 数据处理
+    "pandas>=2.2.2",
+    "openpyxl>=3.1.2",
+    
+    # 邮件
+    "fastapi-mail>=1.4.1",
+    
+    # 日志
+    "structlog>=24.1.0",
+    
+    # PDF 生成
+    "weasyprint>=62.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.7",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.27.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[project.scripts]
+# 可执行命令
+eduadcrm = "app.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
+ignore = ["E501"]  # 行长度由 line-length 控制
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]

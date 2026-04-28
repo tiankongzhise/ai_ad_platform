@@ -1,0 +1,38 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+logs/
+
+# Uploads
+uploads/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Celery
+celerybeat-schedule
+
+# Node (如果有前端)
+node_modules/
