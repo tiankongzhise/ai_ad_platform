@@ -3,16 +3,17 @@
 巨量引擎/百度营销 OAuth 授权信息
 """
 import enum
+import uuid
 from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
     JSON,
-    BigInteger,
     Boolean,
     DateTime,
     Enum,
     ForeignKey,
+    Numeric,
     String,
     Text,
 )
@@ -43,7 +44,7 @@ class AdAccount(Base):
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=lambda: f"ada_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        default=lambda: str(uuid.uuid4())
     )
     
     # 租户关联
@@ -86,9 +87,9 @@ class AdAccount(Base):
         nullable=True
     )
     
-    # 账户余额（仅展示）
+    # 账户余额（单位：元，使用 Numeric 精确存储）
     balance: Mapped[Optional[float]] = mapped_column(
-        BigInteger,
+        Numeric(18, 2),
         nullable=True,
         default=0
     )

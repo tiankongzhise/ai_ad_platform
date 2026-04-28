@@ -50,21 +50,12 @@ class OAuthCallbackRequest(BaseModel):
     state: Optional[str] = Field(None, description="状态参数")
 
 
-class OAuthCallbackResponse(BaseModel):
-    """OAuth 回调响应"""
-    status: str = "success"
-    ad_account_id: str
-    account_name: str
-    next_step: str = "crm_import"  # 引导向导下一步
-    message: str = "巨量引擎授权成功"
-
-
 class SyncStatusResponse(BaseModel):
     """广告同步状态响应"""
     ad_accounts_bound: bool = False
     has_ad_data: bool = False
     sync_in_progress: bool = False
-    last_sync_at: Optional[datetime] = None
+    last_sync_at: Optional[str] = None  # ISO 格式字符串，与 Redis 存储一致
     sync_error: Optional[str] = None
 
 

@@ -134,7 +134,7 @@ export const crmApi = {
 
   /** 预览字段映射 */
   previewMapping: (batchId: string) =>
-    axiosInstance.get<FieldMappingResponse>(`/crm/upload/${batchId}/preview`),
+    axiosInstance.post<FieldMappingResponse>(`/crm/upload/${batchId}/preview`, {}),
 
   /** 确认字段映射并开始导入 */
   confirmMapping: (batchId: string, mappings: Record<string, string>) =>

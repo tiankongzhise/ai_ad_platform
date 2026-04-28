@@ -26,7 +26,7 @@ OAuth 回调链路说明
   8. 302 重定向到前端绑定成功页（带 account_id 参数）
 """
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import structlog
@@ -56,7 +56,6 @@ from app.schemas.ad_account import (
     AdAccountUpdate,
     ManualSyncRequest,
     ManualSyncResponse,
-    OAuthCallbackResponse,
     SyncStatusResponse,
 )
 from app.services.baidu_service import BaiduService, get_baidu_service
@@ -187,10 +186,20 @@ async def juliang_oauth_callback(
                 status_code=302,
             )
 
-    # state 为空时（开发 / 测试场景）降级处理
+    # state 为空时：生产环境拒绝，开发环境降级
     if not tenant_id:
-        logger.warning("OAuth 回调未携带有效 state，使用降级租户 ID（仅开发环境）")
-        tenant_id = "default_tenant"
+        if settings.DEBUG:
+            logger.warning("OAuth 回调未携带有效 state，降级到默认租户（仅开发环境）")
+            tenant_id = "default_tenant"
+        else:
+            logger.warning("生产环境拒绝无 state 的 OAuth 回调")
+            return RedirectResponse(
+                url=(
+                    f"{settings.FRONTEND_URL}/ad-accounts"
+                    f"?oauth_result=error&platform=juliang&reason=missing_state"
+                ),
+                status_code=302,
+            )
 
     try:
         service = get_juliang_service()
@@ -235,7 +244,7 @@ async def juliang_oauth_callback(
             # 已绑定：刷新 Token 和状态
             ad_account.access_token = token_info.access_token
             ad_account.refresh_token = token_info.refresh_token
-            ad_account.token_expires_at = datetime.now() + timedelta(
+            ad_account.token_expires_at = datetime.now(timezone.utc) + timedelta(
                 seconds=token_info.expires_in
             )
             ad_account.balance = balance
@@ -250,7 +259,7 @@ async def juliang_oauth_callback(
                 account_name=account_name,
                 access_token=token_info.access_token,
                 refresh_token=token_info.refresh_token,
-                token_expires_at=datetime.now() + timedelta(
+                token_expires_at=datetime.now(timezone.utc) + timedelta(
                     seconds=token_info.expires_in
                 ),
                 balance=balance,
@@ -275,7 +284,7 @@ async def juliang_oauth_callback(
                     "progress": 0,
                     "synced_count": 0,
                     "error_msg": None,
-                    "started_at": datetime.now().isoformat(),
+                    "started_at": datetime.now(timezone.utc).isoformat(),
                     "finished_at": None,
                 },
             )
@@ -409,7 +418,7 @@ async def baidu_oauth_callback(
         if ad_account:
             ad_account.access_token = token_info.access_token
             ad_account.refresh_token = token_info.refresh_token
-            ad_account.token_expires_at = datetime.now() + timedelta(
+            ad_account.token_expires_at = datetime.now(timezone.utc) + timedelta(
                 seconds=token_info.expires_in
             )
             ad_account.balance = balance
@@ -423,7 +432,7 @@ async def baidu_oauth_callback(
                 account_name=account_name,
                 access_token=token_info.access_token,
                 refresh_token=token_info.refresh_token,
-                token_expires_at=datetime.now() + timedelta(
+                token_expires_at=datetime.now(timezone.utc) + timedelta(
                     seconds=token_info.expires_in
                 ),
                 balance=balance,
@@ -447,7 +456,7 @@ async def baidu_oauth_callback(
                     "progress": 0,
                     "synced_count": 0,
                     "error_msg": None,
-                    "started_at": datetime.now().isoformat(),
+                    "started_at": datetime.now(timezone.utc).isoformat(),
                     "finished_at": None,
                 },
             )
@@ -599,7 +608,7 @@ async def manual_sync_ad_data(
             "progress": 0,
             "synced_count": 0,
             "error_msg": None,
-            "started_at": datetime.now().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "finished_at": None,
         },
     )
@@ -608,7 +617,7 @@ async def manual_sync_ad_data(
         task_id=task.id,
         message=f"已提交同步任务，预计需要 {body.days * 2} 分钟完成",
         estimated_completion=(
-            datetime.now() + timedelta(minutes=body.days * 2)
+            datetime.now(timezone.utc) + timedelta(minutes=body.days * 2)
         ).isoformat(),
     )
 

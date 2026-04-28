@@ -54,6 +54,9 @@ export const CRMPage: React.FC = () => {
   // 归因确认
   const [attributionModalVisible, setAttributionModalVisible] = useState(false);
   
+  // 存储字段映射（用于传递给归因确认后的导入）
+  const [confirmedMappings, setConfirmedMappings] = useState<Record<string, string> | null>(null);
+  
   // 导入进度
   const { progress, isLoading: isProgressLoading, error: progressError, startPolling } = useImportProgress();
 
@@ -112,7 +115,7 @@ export const CRMPage: React.FC = () => {
       
       message.success('文件上传成功，正在解析...');
       setUploadModalVisible(false);
-      setAttributionModalVisible(true);
+      // 先显示字段映射弹窗（不直接打开归因弹窗）
       setUploadFileList([]);
     } catch (error) {
       message.error('文件上传失败');
@@ -122,12 +125,28 @@ export const CRMPage: React.FC = () => {
 
   // 处理字段映射确认
   const handleMappingConfirm = (mappings: Record<string, string>) => {
-    setAttributionModalVisible(false);
-    // 确认归因并开始导入
-    if (currentBatchId) {
-      crmApi.confirmMapping(currentBatchId, mappings).then(() => {
+    // 存储字段映射，确认归因后使用
+    setConfirmedMappings(mappings);
+    // 确认字段映射后，显示归因确认弹窗
+    setAttributionModalVisible(true);
+  };
+
+  // 处理归因确认并开始导入
+  const handleAttributionConfirm = (rules: Record<string, string>) => {
+    if (currentBatchId && confirmedMappings) {
+      // 合并字段映射和归因规则
+      const combinedMappings = {
+        ...confirmedMappings,
+        ...rules,
+      };
+      crmApi.confirmMapping(currentBatchId, combinedMappings).then(() => {
         message.success('导入任务已提交');
         fetchBatches();
+        // 清理状态
+        setAttributionModalVisible(false);
+        setCurrentBatchId(null);
+        setConfirmedMappings(null);
+        setUploadFileList([]);
       }).catch(() => {
         message.error('导入失败');
       });
@@ -333,7 +352,10 @@ export const CRMPage: React.FC = () => {
       <Modal
         title="确认字段映射"
         open={!!currentBatchId && !attributionModalVisible}
-        onCancel={() => setCurrentBatchId(null)}
+        onCancel={() => {
+          setCurrentBatchId(null);
+          setUploadFileList([]);
+        }}
         footer={null}
         width={700}
       >
@@ -341,7 +363,10 @@ export const CRMPage: React.FC = () => {
           <SmartFieldMapper
             batchId={currentBatchId}
             onConfirm={handleMappingConfirm}
-            onCancel={() => setCurrentBatchId(null)}
+            onCancel={() => {
+              setCurrentBatchId(null);
+              setUploadFileList([]);
+            }}
           />
         )}
       </Modal>
@@ -350,10 +375,11 @@ export const CRMPage: React.FC = () => {
       <AttributionConfirm
         open={attributionModalVisible}
         batchId={currentBatchId || ''}
-        onConfirm={handleMappingConfirm}
+        onConfirm={handleAttributionConfirm}
         onCancel={() => {
           setAttributionModalVisible(false);
           setCurrentBatchId(null);
+          setConfirmedMappings(null);
         }}
       />
 

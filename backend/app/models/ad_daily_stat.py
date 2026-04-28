@@ -1,6 +1,7 @@
 """
 广告每日数据统计模型
 """
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -11,6 +12,8 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
+    Numeric,
     String,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -25,7 +28,7 @@ class AdDailyStat(Base):
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=lambda: f"ads_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        default=lambda: str(uuid.uuid4())
     )
     
     # 租户关联
@@ -81,34 +84,34 @@ class AdDailyStat(Base):
     )
     
     # 核心指标
-    spend: Mapped[float] = mapped_column(
-        BigInteger,
+    spend: Mapped[int] = mapped_column(
+        Integer,
         default=0,  # 实际存储单位：分
         nullable=False
     )
     impressions: Mapped[int] = mapped_column(
-        BigInteger,
+        Integer,
         default=0,
         nullable=False
     )
     clicks: Mapped[int] = mapped_column(
-        BigInteger,
+        Integer,
         default=0,
         nullable=False
     )
     form_submissions: Mapped[int] = mapped_column(
-        BigInteger,
+        Integer,
         default=0,
         nullable=False
     )
     
     # 计算指标
     cost_per_click: Mapped[Optional[float]] = mapped_column(
-        BigInteger,
+        Numeric(18, 2),
         nullable=True
     )
     cost_per_form: Mapped[Optional[float]] = mapped_column(
-        BigInteger,
+        Numeric(18, 2),
         nullable=True
     )
     ctr: Mapped[Optional[float]] = mapped_column(

@@ -1,12 +1,13 @@
 """
 多租户中间件
-自动注入 tenant_id 到请求状态
+自动注入 tenant_id 到请求状态，请求结束后自动清理上下文
 """
 from contextvars import ContextVar
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -125,3 +126,21 @@ def get_tenant_id() -> str:
             detail="缺少租户上下文",
         )
     return tenant_id
+
+
+class TenantContextCleanupMiddleware(BaseHTTPMiddleware):
+    """
+    请求结束后自动清理 TenantContext
+
+    防止 ContextVar 中的 tenant_id/user_id 在请求结束后仍然残留，
+    虽然在标准 asyncio 中每个请求是独立协程，但在某些 ASGI 服务器
+    (如 uvicorn + asyncio) 中协程可能被复用，导致上下文泄漏。
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            response: Response = await call_next(request)
+            return response
+        finally:
+            # 请求结束后（无论成功还是异常）清理租户上下文
+            TenantContext.clear()

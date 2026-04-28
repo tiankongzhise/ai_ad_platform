@@ -18,6 +18,7 @@ from app.api.v1.settings import router as settings_router
 from app.core.config import settings
 from app.core.database import close_db, init_db
 from app.core.redis_client import close_redis, get_redis
+from app.core.tenant import TenantContextCleanupMiddleware
 
 
 @asynccontextmanager
@@ -58,6 +59,9 @@ app = FastAPI(
 
 # ==================== 中间件 ====================
 
+# 租户上下文清理中间件（必须在 CORS 之前注册）
+app.add_middleware(TenantContextCleanupMiddleware)
+
 # CORS 中间件
 app.add_middleware(
     CORSMiddleware,
@@ -71,6 +75,21 @@ app.add_middleware(
 # ==================== 全局异常处理 ====================
 
 from fastapi import HTTPException
+
+from app.core.exceptions import EduAdCRMException
+
+
+@app.exception_handler(EduAdCRMException)
+async def edu_exception_handler(request: Request, exc: EduAdCRMException):
+    """业务自定义异常处理器"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": exc.code,
+            "message": exc.detail,
+            "extra": exc.extra,
+        },
+    )
 
 
 @app.exception_handler(HTTPException)

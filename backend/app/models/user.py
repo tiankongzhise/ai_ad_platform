@@ -1,6 +1,7 @@
 """
 用户模型
 """
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -17,7 +18,7 @@ class User(Base):
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=lambda: f"usr_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        default=lambda: str(uuid.uuid4())
     )
     
     # 租户关联

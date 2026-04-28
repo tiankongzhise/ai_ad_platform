@@ -22,7 +22,7 @@ const { RangePicker } = DatePicker;
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isDemoMode, demoData, fetchDemoData } = useDemoStore();
+  const { isDemoMode, demoData, fetchDemoData, enableDemoMode } = useDemoStore();
   const { isCompleted: onboardingCompleted, fetchStatus } = useOnboardingStore();
 
   // 数据状态
@@ -98,7 +98,6 @@ export const DashboardPage: React.FC = () => {
 
   const handleViewDemo = () => {
     // 切换到演示模式
-    const { enableDemoMode } = useDemoStore.getState();
     enableDemoMode();
   };
 
