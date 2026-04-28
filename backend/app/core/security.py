@@ -1,6 +1,7 @@
 """
 JWT 认证与授权
 """
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -30,24 +31,31 @@ def create_access_token(
 ) -> str:
     """
     创建 JWT Access Token
-    
+
     Args:
         data: 包含在token中的数据（需包含sub用户标识）
         expires_delta: 过期时间增量，不指定则使用默认配置
-    
+
     Returns:
         编码后的JWT字符串
     """
     to_encode = data.copy()
-    
+
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
-    
-    to_encode.update({"exp": expire, "type": "access"})
+
+    # 生成唯一 JWT ID 用于黑名单追踪
+    jti = secrets.token_urlsafe(16)
+
+    to_encode.update({
+        "exp": expire,
+        "type": "access",
+        "jti": jti,
+    })
     encoded_jwt = jwt.encode(
         to_encode,
         settings.SECRET_KEY,
@@ -64,15 +72,22 @@ def create_refresh_token(
     创建 JWT Refresh Token
     """
     to_encode = data.copy()
-    
+
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(
             days=settings.REFRESH_TOKEN_EXPIRE_DAYS
         )
-    
-    to_encode.update({"exp": expire, "type": "refresh"})
+
+    # 生成唯一 JWT ID 用于黑名单追踪
+    jti = secrets.token_urlsafe(16)
+
+    to_encode.update({
+        "exp": expire,
+        "type": "refresh",
+        "jti": jti,
+    })
     encoded_jwt = jwt.encode(
         to_encode,
         settings.SECRET_KEY,

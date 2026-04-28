@@ -37,7 +37,7 @@ export const DashboardPage: React.FC = () => {
     dayjs().subtract(30, 'day'),
     dayjs(),
   ]);
-  const [timeRange, setTimeRange] = useState<string>('30d');
+  const [timeRange, setTimeRange] = useState<number>(30);
 
   useEffect(() => {
     fetchData();
@@ -63,7 +63,7 @@ export const DashboardPage: React.FC = () => {
       if (statusRes.data.status === 'full_data' || statusRes.data.has_ad_data) {
         const [metricsRes, trendRes, channelRes] = await Promise.all([
           analyticsApi.getDashboard(),
-          analyticsApi.getTrend({ days: parseInt(timeRange) }),
+          analyticsApi.getTrend({ days: timeRange }),
           analyticsApi.getChannelCompare(),
         ]);
         setMetrics(metricsRes.data);
@@ -77,10 +77,9 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleTimeRangeChange = (value: string) => {
+  const handleTimeRangeChange = (value: number) => {
     setTimeRange(value);
-    const days = parseInt(value);
-    setDateRange([dayjs().subtract(days, 'day'), dayjs()]);
+    setDateRange([dayjs().subtract(value, 'day'), dayjs()]);
   };
 
   const handleAction = () => {
@@ -155,13 +154,13 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
         <Space>
-          <Segmented
+          <Segmented<number>
             value={timeRange}
             onChange={handleTimeRangeChange}
             options={[
-              { label: '7天', value: '7d' },
-              { label: '30天', value: '30d' },
-              { label: '90天', value: '90d' },
+              { label: '7天', value: 7 },
+              { label: '30天', value: 30 },
+              { label: '90天', value: 90 },
             ]}
           />
           <RangePicker

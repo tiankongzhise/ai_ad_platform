@@ -58,7 +58,29 @@ export const AdAccountsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    // 加载账户列表
     fetchAccounts();
+    
+    // 处理 OAuth 回调结果
+    const params = new URLSearchParams(window.location.search);
+    const oauthResult = params.get('oauth_result');
+    const platform = params.get('platform');
+    const accountName = params.get('account_name');
+    
+    if (oauthResult === 'success') {
+      message.success(`${platform === 'baidu' ? '百度' : '巨量引擎'}账户 ${accountName} 绑定成功！`);
+      // 清除 URL 参数
+      window.history.replaceState({}, '', '/ad-accounts');
+      // 刷新账户列表
+      fetchAccounts();
+    } else if (oauthResult === 'cancelled') {
+      message.info('授权已取消');
+      window.history.replaceState({}, '', '/ad-accounts');
+    } else if (oauthResult === 'error') {
+      const reason = params.get('reason');
+      message.error(`授权失败: ${reason}`);
+      window.history.replaceState({}, '', '/ad-accounts');
+    }
   }, []);
 
   // 绑定广告账户
@@ -72,10 +94,8 @@ export const AdAccountsPage: React.FC = () => {
       }
       
       const { oauth_url } = response.data;
-      // 打开授权页面
-      window.open(oauth_url, '_blank', 'width=600,height=700');
-      
-      message.success('已在新窗口打开授权页面');
+      // 整页跳转到授权页，避免弹窗被拦截
+      window.location.href = oauth_url;
     } catch (error) {
       message.error('获取授权链接失败，请稍后重试');
     }

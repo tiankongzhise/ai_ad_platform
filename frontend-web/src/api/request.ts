@@ -5,6 +5,9 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { message } from 'antd';
 
+// Token 刷新 Promise 锁（避免并发刷新）
+let refreshPromise: Promise<string> | null = null;
+
 // 创建 Axios 实例
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -43,22 +46,37 @@ axiosInstance.interceptors.response.use(
 
       const refreshToken = localStorage.getItem('refresh_token');
       if (refreshToken) {
-        try {
-          const response = await axios.post('/api/v1/auth/refresh', {
+        // 如果没有正在刷新的 Promise，就创建一个
+        if (!refreshPromise) {
+          refreshPromise = axios.post('/api/v1/auth/refresh', {
             refresh_token: refreshToken,
-          });
-          const { access_token } = response.data;
-          localStorage.setItem('access_token', access_token);
-          
+          })
+            .then((response) => {
+              const { access_token } = response.data;
+              localStorage.setItem('access_token', access_token);
+              return access_token;
+            })
+            .catch((refreshError) => {
+              // 刷新失败，清除本地存储并跳转登录
+              localStorage.removeItem('access_token');
+              localStorage.removeItem('refresh_token');
+              window.location.href = '/login';
+              throw refreshError;
+            })
+            .finally(() => {
+              refreshPromise = null;  // 清除锁
+            });
+        }
+
+        try {
+          // 等待刷新完成
+          const access_token = await refreshPromise;
           if (originalRequest.headers) {
             originalRequest.headers.Authorization = `Bearer ${access_token}`;
           }
           return axiosInstance(originalRequest);
-        } catch (refreshError) {
-          // 刷新失败，跳转登录
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          window.location.href = '/login';
+        } catch {
+          return Promise.reject(error);
         }
       } else {
         window.location.href = '/login';

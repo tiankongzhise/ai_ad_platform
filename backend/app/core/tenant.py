@@ -2,6 +2,7 @@
 多租户中间件
 自动注入 tenant_id 到请求状态
 """
+from contextvars import ContextVar
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
@@ -15,30 +16,31 @@ from app.core.security import verify_access_token
 # Bearer Token 认证
 bearer_scheme = HTTPBearer(auto_error=False)
 
+# ContextVar for thread/coroutine-safe tenant context
+_tenant_id_var: ContextVar[Optional[str]] = ContextVar('tenant_id', default=None)
+_user_id_var: ContextVar[Optional[str]] = ContextVar('user_id', default=None)
+
 
 class TenantContext:
-    """租户上下文（线程安全）"""
-    
-    _tenant_id: Optional[str] = None
-    _user_id: Optional[str] = None
-    
+    """租户上下文（基于 ContextVar，线程/协程安全）"""
+
     @classmethod
     def set(cls, tenant_id: str, user_id: str) -> None:
-        cls._tenant_id = tenant_id
-        cls._user_id = user_id
-    
+        _tenant_id_var.set(tenant_id)
+        _user_id_var.set(user_id)
+
     @classmethod
     def get_tenant_id(cls) -> Optional[str]:
-        return cls._tenant_id
-    
+        return _tenant_id_var.get()
+
     @classmethod
     def get_user_id(cls) -> Optional[str]:
-        return cls._user_id
-    
+        return _user_id_var.get()
+
     @classmethod
     def clear(cls) -> None:
-        cls._tenant_id = None
-        cls._user_id = None
+        _tenant_id_var.set(None)
+        _user_id_var.set(None)
 
 
 async def get_current_user(

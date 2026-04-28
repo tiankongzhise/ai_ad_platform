@@ -343,6 +343,7 @@ async def baidu_oauth_callback(
         )
 
     # ── 1. 验证 state，还原 tenant_id ─────────────────────────────
+    import os
     tenant_id: Optional[str] = None
     if state:
         user_ctx = await consume_oauth_state(state)
@@ -358,7 +359,18 @@ async def baidu_oauth_callback(
                 status_code=302,
             )
 
+    # 生产环境强制要求 state
     if not tenant_id:
+        allow_downgrade = os.getenv("ALLOW_OAUTH_STATE_DOWNGRADE", "false").lower() == "true"
+        if not allow_downgrade:
+            logger.warning("生产环境拒绝无 state 的 OAuth 回调")
+            return RedirectResponse(
+                url=(
+                    f"{settings.FRONTEND_URL}/ad-accounts"
+                    f"?oauth_result=error&platform=baidu&reason=missing_state"
+                ),
+                status_code=302,
+            )
         logger.warning("百度 OAuth 回调未携带有效 state，使用降级租户 ID（仅开发环境）")
         tenant_id = "default_tenant"
 

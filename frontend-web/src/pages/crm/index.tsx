@@ -318,7 +318,6 @@ export const CRMPage: React.FC = () => {
           onChange={({ fileList }) => setUploadFileList(fileList)}
           customRequest={handleUpload}
           maxCount={1}
-          beforeUpload={() => false}
         >
           <p className="text-4xl mb-4">
             <UploadOutlined />
