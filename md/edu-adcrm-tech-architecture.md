@@ -538,6 +538,163 @@ GET  /api/v1/reports/{id}/insights  # v2.0新增：获取报表行动建议
 
 ---
 
+## 六A、广告平台 OAuth 回调传值机制（新增）
+
+> **本章解答**：后端如何获取广告平台回调链接传递的 `code` 和 `state` 参数，并以此完成 Token 换取和用户身份还原。
+
+### 6A.1 OAuth 回调的本质
+
+广告平台（巨量引擎 / 百度营销）采用标准 **OAuth 2.0 Authorization Code Flow**。用户在广告平台完成授权后，平台会**将值以 Query String 形式拼在 `redirect_uri` 上**，向我们的服务器发起一次 **HTTP GET** 请求：
+
+```
+GET /api/v1/ad/juliang/callback?code=AUTH_CODE_XXX&state=RANDOM_STATE_XXX
+                                ↑                  ↑
+                        一次性授权码            防 CSRF 随机串
+```
+
+FastAPI 用 `Query(...)` 注解自动从 URL 解析这两个参数：
+
+```python
+@router.get("/juliang/callback")
+async def juliang_oauth_callback(
+    code: str = Query(..., description="巨量引擎回传的一次性授权码"),
+    state: Optional[str] = Query(None, description="防 CSRF 状态参数"),
+    error: Optional[str] = Query(None, description="用户拒绝时平台传入的错误码"),
+    db: AsyncSession = Depends(get_db),
+):
+    ...
+```
+
+### 6A.2 完整回调链路
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        OAuth 回调完整链路                                  │
+│                                                                          │
+│  1. 前端点击"绑定巨量引擎"                                                │
+│       │                                                                  │
+│       ▼                                                                  │
+│  2. GET /api/v1/ad/juliang/oauth-url  （需 JWT 认证）                    │
+│       │ 后端：生成 state = secrets.token_urlsafe(32)                     │
+│       │        Redis.setex("oauth_state:{state}", 600,                  │
+│       │                    "{tenant_id}:{user_id}")                      │
+│       │ 返回：{"oauth_url": "https://open.oceanengine.com/authorize?     │
+│       │               app_id=xxx&redirect_uri=xxx&state=STATE"}         │
+│       │                                                                  │
+│       ▼                                                                  │
+│  3. 前端 window.location.href = oauth_url                               │
+│       │（浏览器跳转到巨量引擎授权页）                                      │
+│       │                                                                  │
+│       ▼                                                                  │
+│  4. 用户在广告平台完成授权                                                 │
+│       │                                                                  │
+│       ▼                                                                  │
+│  5. 广告平台 → 302 跳转 →                                                │
+│       GET /api/v1/ad/juliang/callback?code=AUTH_CODE&state=STATE        │
+│       │ ← 这里就是"回调链接传值"的发生点 →                               │
+│       │                                                                  │
+│       ▼                                                                  │
+│  6. 后端 juliang_oauth_callback() 处理：                                 │
+│       a. 从 URL Query 读取 code、state                                   │
+│       b. Redis.getdel("oauth_state:{state}") → 还原 tenant_id            │
+│       c. 用 code 调用巨量引擎 Token 接口，换取 access_token              │
+│       d. 获取广告主列表，写入 AdAccount 表                               │
+│       e. 触发 Celery: sync_ad_data_juliang.delay(account_id, days=7)    │
+│       f. Redis.setex("ad_sync_status:{account_id}", ...) 记录进度        │
+│       │                                                                  │
+│       ▼                                                                  │
+│  7. 302 重定向 →                                                         │
+│       {FRONTEND_URL}/ad-accounts?oauth_result=success&account_id=xxx    │
+│       │（浏览器跳转回前端，前端读取 Query 参数展示结果）                   │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 6A.3 关键参数说明
+
+| 参数 | 来源 | 说明 |
+|------|------|------|
+| `code` | 广告平台拼入回调 URL | 一次性授权码，有效期约 5 分钟，调用 Token 接口兑换后失效 |
+| `state` | 广告平台原样回传 | 我们在发起授权时生成的随机串，用于**防 CSRF 攻击**和**还原 tenant_id** |
+| `error` | 广告平台拼入回调 URL | 用户拒绝授权时传入（如 `access_denied`），此时没有 `code` |
+
+### 6A.4 state 防 CSRF + tenant_id 还原机制
+
+**问题**：OAuth 回调是广告平台直接 GET 我们的接口，不携带 JWT，后端无法知道是哪个用户（租户）发起了授权。
+
+**解决方案**：发起授权时将 `state → tenant_id` 的映射**提前存入 Redis**，回调时通过 `state` 反查：
+
+```python
+# 发起授权（app/api/v1/ad_accounts.py）
+state = secrets.token_urlsafe(32)
+await save_oauth_state(
+    state=state,
+    tenant_id=current_user["tenant_id"],
+    user_id=current_user["user_id"],
+)
+# Redis key: oauth_state:{state}
+# Redis value: {"tenant_id": "xxx", "user_id": "yyy"}
+# TTL: 600 秒（10 分钟）
+
+# 回调处理
+user_ctx = await consume_oauth_state(state)   # getdel，读取后立即删除（防重放）
+tenant_id = user_ctx["tenant_id"]
+```
+
+**`save_oauth_state` / `consume_oauth_state` 实现位置**：`app/core/redis_client.py`
+
+### 6A.5 回调后的状态传递（前端感知）
+
+回调处理完成后，后端通过 **302 重定向**携带结果给前端：
+
+```
+# 成功
+{FRONTEND_URL}/ad-accounts?oauth_result=success&platform=juliang&account_id=xxx
+
+# 用户取消
+{FRONTEND_URL}/ad-accounts?oauth_result=cancelled&platform=juliang
+
+# 失败
+{FRONTEND_URL}/ad-accounts?oauth_result=error&platform=juliang&reason=xxx
+```
+
+前端在 `/ad-accounts` 页面加载时读取 `location.search` 中的 `oauth_result` 展示对应 Toast。
+
+### 6A.6 同步状态跟踪（Redis → 前端轮询）
+
+OAuth 回调触发 Celery 任务后，通过 Redis 跟踪进度，前端轮询 `GET /api/v1/ad/sync-status`：
+
+```
+Redis key: ad_sync_status:{account_id}
+Redis value: {
+  "status":      "running" | "success" | "error",
+  "progress":    0-100,
+  "synced_count": int,
+  "error_msg":   null | string,
+  "started_at":  ISO datetime,
+  "finished_at": ISO datetime | null
+}
+TTL: 86400 秒（24小时）
+```
+
+**写入时机**：
+- 触发 Celery 时（ad_accounts.py）：写入 `running` 状态
+- 任务成功完成（sync_ad_tasks.py）：更新为 `success` + `synced_count`
+- 任务失败超重试（sync_ad_tasks.py）：更新为 `error` + `error_msg`
+
+### 6A.7 新增/修改文件清单
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `app/core/redis_client.py` | **新增** | Redis 连接池、OAuth state 存取、同步状态读写、JWT 黑名单 |
+| `app/services/baidu_service.py` | **新增** | 百度营销 API 封装（OAuth + 数据拉取） |
+| `app/api/v1/ad_accounts.py` | **完善** | 补全 Redis state 存取、百度回调、302重定向、幂等写入 |
+| `app/tasks/sync_ad_tasks.py` | **完善** | 任务成功/失败后写回 Redis 同步状态 |
+| `app/core/config.py` | **完善** | 新增 `FRONTEND_URL` 配置项 |
+| `app/main.py` | **完善** | 生命周期中加入 Redis 预热与关闭 |
+
+---
+
 ## 七、异步任务设计（Celery）
 
 ### 7.1 任务清单（v2.0 更新）
@@ -949,6 +1106,7 @@ pytest-asyncio==0.23.7
 |------|------|----------|
 | v1.0 | 2026-04-27 | 初始版本，基于产品需求文档 |
 | v2.0 | 2026-04-28 | 整合MVP v2.0任务列表、UX架构v1.0断点修复需求 |
+| v2.1 | 2026-04-28 | 新增第六A章：广告平台 OAuth 回调传值机制完整实现；新增 Redis 工具层、百度营销服务封装；修复 state→tenant_id 还原缺失、百度回调未实现、同步状态无跟踪等问题 |
 
 ---
 

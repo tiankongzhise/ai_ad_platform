@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "noreply@example.com"
     
+    # ==================== 前端地址（OAuth 回调后重定向到前端）====================
+    # 生产环境通过 .env 设置为真实域名，例如 https://app.yourdomain.com
+    FRONTEND_URL: str = "http://localhost:3000"
+
     # ==================== CORS 配置 ====================
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8080"]
     

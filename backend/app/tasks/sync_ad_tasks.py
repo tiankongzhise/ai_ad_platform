@@ -1,7 +1,13 @@
 """
 广告数据同步 Celery 任务
 包含立即拉取模式（绑定后）和定时拉取模式
+
+同步状态写回约定（Redis key: ad_sync_status:{account_id}）：
+  - 任务开始：由 ad_accounts.py 的 OAuth 回调 / 手动同步接口写入 running 状态
+  - 任务成功：本模块写入 success 状态 + synced_count + finished_at
+  - 任务失败：本模块写入 error 状态 + error_msg + finished_at
 """
+import asyncio
 import structlog
 from datetime import datetime, timedelta
 
@@ -12,6 +18,24 @@ from app.models.ad_account import AdAccount, AdAccountStatus, AdPlatform
 from app.models.ad_daily_stat import AdDailyStat
 from app.services.juliang_service import get_juliang_service
 from app.tasks.celery_app import celery_app
+
+
+def _update_sync_status(account_id: str, status_data: dict) -> None:
+    """同步写入 Redis 同步状态（Celery 任务为同步环境，使用同步 Redis 客户端）"""
+    try:
+        import json
+        import redis as sync_redis
+        from app.core.config import settings
+
+        r = sync_redis.from_url(settings.REDIS_URL, decode_responses=True)
+        r.setex(
+            f"ad_sync_status:{account_id}",
+            86400,
+            json.dumps(status_data, ensure_ascii=False, default=str),
+        )
+        r.close()
+    except Exception as e:
+        logger.warning("写入同步状态到 Redis 失败", account_id=account_id, error=str(e))
 
 
 logger = structlog.get_logger()
@@ -140,6 +164,19 @@ def sync_ad_data_juliang(self, account_id: str, days: int = 7):
                 synced_count=synced_count,
             )
             
+            # 写回 Redis 同步状态（供前端轮询）
+            _update_sync_status(
+                account_id=account_id,
+                status_data={
+                    "status": "success",
+                    "progress": 100,
+                    "synced_count": synced_count,
+                    "error_msg": None,
+                    "started_at": None,        # 启动时由调用方写入
+                    "finished_at": datetime.now().isoformat(),
+                },
+            )
+
             return {
                 "status": "success",
                 "account_id": account_id,
@@ -158,6 +195,19 @@ def sync_ad_data_juliang(self, account_id: str, days: int = 7):
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc)
         
+        # 已超过最大重试次数，写回错误状态
+        _update_sync_status(
+            account_id=account_id,
+            status_data={
+                "status": "error",
+                "progress": 0,
+                "synced_count": 0,
+                "error_msg": str(exc),
+                "started_at": None,
+                "finished_at": datetime.now().isoformat(),
+            },
+        )
+
         return {
             "status": "error",
             "message": str(exc),

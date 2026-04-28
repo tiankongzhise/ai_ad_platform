@@ -10,16 +10,19 @@ from fastapi.responses import JSONResponse
 from app.api.v1.ad_accounts import router as ad_accounts_router
 from app.core.config import settings
 from app.core.database import close_db, init_db
+from app.core.redis_client import close_redis, get_redis
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时
+    # 启动时：初始化数据库 + 预热 Redis 连接
     await init_db()
+    await get_redis()        # 预热连接池，启动即可用
     yield
-    # 关闭时
+    # 关闭时：释放所有连接
     await close_db()
+    await close_redis()
 
 
 app = FastAPI(
